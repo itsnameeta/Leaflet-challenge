@@ -1,176 +1,144 @@
-// API endpoints
-var earthquakeLink = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson";
-var tectonicplatesLink = "https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_plates.json";
+// Visualizing-Data-with-Leaflet - logic.js
+// Earthquakes & Tectonic Plates GeoJSON URL Variables
+var earthquakesURL = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson"
+var platesURL = "https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json"
+//var platesURL = /input/tectonicplates-master/GeoJSON/PB2002_boundaries.json
 
-// Grab the earthquake data with d3
-d3.json(earthquakeLink, function(earthquakeData) {
 
-  // Call createFeatures on the data
-  createFeatures(earthquakeData);
+// Initialize & Create Two Separate LayerGroups: earthquakes & tectonicPlates
+var earthquakes = new L.LayerGroup();
+var tectonicPlates = new L.LayerGroup();
 
+// Define Variables for Tile Layers
+var satelliteMap = L.tileLayer("https://api.mapbox.com/styles/v1/mapbox/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}", {
+    attribution: "Map data &copy; <a href=\"https://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"https://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA</a>, Imagery © <a href=\"https://www.mapbox.com/\">Mapbox</a>",
+    maxZoom: 18,
+    id: "satellite-v9",
+    accessToken: API_KEY
 });
 
-function createFeatures(earthquakeData) {
-
-  // Grab the 'features' from the data
-  var features = earthquakeData.features;
-
-  // Create an array to hold earthquake data markers
-  var earthquakeMarkers = [];
-
-  // Grab the titles of the locations
-  var titles = []; 
-  features.forEach(function(d) {
-    var title = d.properties.title;
-    var words = title.split("of");
-    titles.push(words[1]);
-  });
-
-  // Loop through each feature and add a marker using the latitude/longitude values
-  for(var i = 0; i < features.length; i++) {
-      
-    // Add the circles to the earthquakeMarkers array
-    earthquakeMarkers.push(
-      L.circle([features[i].geometry.coordinates[1], features[i].geometry.coordinates[0]], {
-        fillOpacity: 0.75,
-        color: "#404040",
-        weight: 0.5,
-        // Adjust fill color
-        fillColor: chooseColor(features[i].properties.mag),
-        // Adjust radius
-        radius: markerSize(features[i].properties.mag)
-      }).bindPopup("<h3>" + titles[i] + "</h3><hr><h3><center>" + features[i].properties.mag + " ML</center></h3>")
-    );
-  }
-
-  // Call createMap on earthquakes
-  createMap(earthquakeMarkers)
-}
-
-function createMap(earthquakeMarkers) {
-
-  // Define a grayscale tile layer to the map
-  var lightmap = L.tileLayer("https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}", {
+var grayscaleMap = L.tileLayer("https://api.mapbox.com/styles/v1/mapbox/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}", {
     attribution: "Map data &copy; <a href=\"https://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"https://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA</a>, Imagery © <a href=\"https://www.mapbox.com/\">Mapbox</a>",
     maxZoom: 18,
-    id: "mapbox.light",
+    id: "light-v10",
     accessToken: API_KEY
-  });
+});
 
-  // Define an outdoors tile layer to the map
-  var outdoormap = L.tileLayer("https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}", {
+var outdoorsMap = L.tileLayer("https://api.mapbox.com/styles/v1/mapbox/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}", {
     attribution: "Map data &copy; <a href=\"https://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"https://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA</a>, Imagery © <a href=\"https://www.mapbox.com/\">Mapbox</a>",
     maxZoom: 18,
-    id: "mapbox.outdoors",
+    id: "outdoors-v11",
     accessToken: API_KEY
-  });
+});
 
-  // Define a satellite tile layer 
-  var satellitemap = L.tileLayer("https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}", {
-    attribution: "Map data &copy; <a href=\"https://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"https://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA</a>, Imagery © <a href=\"https://www.mapbox.com/\">Mapbox</a>",
-    maxZoom: 18,
-    id: "mapbox.satellite",
-    accessToken: API_KEY
-  });
+// Define baseMaps Object to Hold Base Layers
+var baseMaps = {
+    "Satellite": satelliteMap,
+    "Grayscale": grayscaleMap,
+    "Outdoors": outdoorsMap
+};
 
-  // Create a basemaps object containing all tile layers
-  var baseMaps = {
-    "Satellite": satellitemap,
-    "Grayscale": lightmap,
-    "Outdoors": outdoormap 
-  };
-
-  // Create layer groups for earthquakes and tectonic plates
-  var earthquakes = L.layerGroup(earthquakeMarkers);
-  var tectonicplates = new L.LayerGroup();
-
-  // Create an overlays object contaning the earthquakes and tectonic plates layer groups
-  var overlayMaps = {
+// Create Overlay Object to Hold Overlay Layers
+var overlayMaps = {
     "Earthquakes": earthquakes,
-    "Fault Lines": tectonicplates
-  };
+    "Fault Lines": tectonicPlates
+};
 
-  // Create a map object and pass in the earthquakes and tectonic plates layers along with the satellite basemap
-  var myMap = L.map("map", {
-    center: [12.001712, -32.730358],
-    zoom: 3,
-    layers: [satellitemap, earthquakes, tectonicplates]
-  });
+// Create Map, Passing In satelliteMap & earthquakes as Default Layers to Display on Load
+var myMap = L.map("map", {
+    center: [37.09, -95.71],
+    zoom: 2,
+    layers: [satelliteMap, earthquakes]
+});
 
-  // Grab the tectonic plates data with d3
-  d3.json(tectonicplatesLink, function(tectonicplatesData) {
-    
-    // Define a function we want to run once for each feature in the features array
-    // Give each feature a popup describing the name of the plate
-    function onEachFeature(feature, layer) {
-      layer.setStyle({
-        color: '#FFA500'
-      });
-      layer.bindPopup("<h3>" + feature.properties.PlateName + "</h3>")
-    }
-
-    // Create a GeoJSON array containing the features array grabbed from the tectonic plates data
-    // Run the onEachFeature function once for each piece of data in the array
-    L.geoJson(tectonicplatesData, {
-      onEachFeature: onEachFeature
-    }).addTo(tectonicplates);
-    
-  });
-
-  // Create a legend for the map
-  var legend = L.control({position: "bottomright"});
-
-  // Legend will be called once map is displayed
-  legend.onAdd = function (map) {
-
-    var div = L.DomUtil.create('div', 'info legend'),
-      grades = [0, 1, 2, 3, 4, 5],
-      labels = [];
-
-    // Loop through our magnitude intervals and generate a label with a colored square for each interval
-    for (var i = 0; i < grades.length; i++) {
-      div.innerHTML +=
-        '<i style="background:' +  chooseColor(grades[i] + 1) + '"></i> ' +
-        grades[i] + (grades[i + 1] ? '&ndash;' + grades[i + 1] + '<br>' : '+');
-    }
-    return div;
-  };
-  
-  // Add the legend to the map
-  legend.addTo(myMap);
-
-  // Create a layer control, pass in both baseMaps and overlayMaps objects and add it to the map
-  L.control.layers(baseMaps, overlayMaps, {
-      collapsed: false
+// Create a Layer Control + Pass in baseMaps and overlayMaps + Add the Layer Control to the Map
+L.control.layers(baseMaps, overlayMaps, {
+    collapsed: true
   }).addTo(myMap);
-}
 
-// Function to choose marker color based on earthquake magnitude 
-function chooseColor(magnitude) {
-  if (magnitude > 5) {
-    return '#FF4500';
-  }
-  else if (magnitude >= 4 && magnitude <= 5) {
-    return '#FF8C00';
-  }
-  else if (magnitude >= 3 && magnitude <= 4) {
-    return '#FFA500';
-  }
-  else if (magnitude >= 2 && magnitude <= 3) {
-    return '#FFD700';
-  }
-  else if (magnitude >= 1 && magnitude <= 2) {
-    return '#ADFF2F';
-  }
-  else if (magnitude >= 0 && magnitude <= 1) {
-    return '#7FFF00';
-  }
-  else {
-    return '#fff';
-  }
-}
+// Retrieve earthquakesURL (USGS Earthquakes GeoJSON Data) with D3
+d3.json(earthquakesURL, function(earthquakeData) {
+    // Function to Determine Size of Marker Based on the Magnitude of the Earthquake
+    function markerSize(magnitude) {
+        if (magnitude === 0) {
+          return 1;
+        }
+        return magnitude * 3;
+    }
+    // Function to Determine Style of Marker Based on the Magnitude of the Earthquake
+    function styleInfo(feature) {
+        return {
+          opacity: 1,
+          fillOpacity: 1,
+          fillColor: chooseColor(feature.properties.mag),
+          color: "#000000",
+          radius: markerSize(feature.properties.mag),
+          stroke: true,
+          weight: 0.5
+        };
+    }
+    // Function to Determine Color of Marker Based on the Magnitude of the Earthquake
+    function chooseColor(magnitude) {
+        switch (true) {
+        case magnitude > 5:
+            return "#581845";
+        case magnitude > 4:
+            return "#900C3F";
+        case magnitude > 3:
+            return "#C70039";
+        case magnitude > 2:
+            return "#FF5733";
+        case magnitude > 1:
+            return "#FFC300";
+        default:
+            return "#DAF7A6";
+        }
+    }
+    // Create a GeoJSON Layer Containing the Features Array on the earthquakeData Object
+    L.geoJSON(earthquakeData, {
+        pointToLayer: function(feature, latlng) {
+            return L.circleMarker(latlng);
+        },
+        style: styleInfo,
+        // Function to Run Once For Each feature in the features Array
+        // Give Each feature a Popup Describing the Place & Time of the Earthquake
+        onEachFeature: function(feature, layer) {
+            layer.bindPopup("<h4>Location: " + feature.properties.place + 
+            "</h4><hr><p>Date & Time: " + new Date(feature.properties.time) + 
+            "</p><hr><p>Magnitude: " + feature.properties.mag + "</p>");
+        }
+    // Add earthquakeData to earthquakes LayerGroups 
+    }).addTo(earthquakes);
+    // Add earthquakes Layer to the Map
+    earthquakes.addTo(myMap);
 
-// Function to adjust marker radius based on earthquake magnitude
-function markerSize(magnitude) {
-  return magnitude * 20000;
-}
+    // Retrieve platesURL (Tectonic Plates GeoJSON Data) with D3
+    d3.json(platesURL, function(plateData) {
+        // Create a GeoJSON Layer the plateData
+        L.geoJson(plateData, {
+            color: "#DC143C",
+            weight: 2
+        // Add plateData to tectonicPlates LayerGroups 
+        }).addTo(tectonicPlates);
+        // Add tectonicPlates Layer to the Map
+        tectonicPlates.addTo(myMap);
+    });
+
+    // Set Up Legend
+    var legend = L.control({ position: "bottomright" });
+    legend.onAdd = function() {
+        var div = L.DomUtil.create("div", "info legend"), 
+        magnitudeLevels = [0, 1, 2, 3, 4, 5];
+
+        div.innerHTML += "<h3>Magnitude</h3>"
+
+        for (var i = 0; i < magnitudeLevels.length; i++) {
+            div.innerHTML +=
+                '<i style="background: ' + chooseColor(magnitudeLevels[i] + 1) + '"></i> ' +
+                magnitudeLevels[i] + (magnitudeLevels[i + 1] ? '&ndash;' + magnitudeLevels[i + 1] + '<br>' : '+');
+        }
+        return div;
+    };
+    // Add Legend to the Map
+    legend.addTo(myMap);
+});
